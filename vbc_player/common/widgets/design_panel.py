@@ -24,7 +24,13 @@ class DesignPanel(QWidget):
     def __init__(self, component_id, parent=None):
         super().__init__(parent)
         if DesignPanel._components is None:
-            components = [node for i in range(4) for node in json.loads((DESIGN / f"geometry-{i}.json").read_text())]
+            components = [
+                node
+                for i in range(4)
+                for node in json.loads(
+                    (DESIGN / f"geometry-{i}.json").read_text(encoding="utf-8")
+                )
+            ]
             DesignPanel._components = {node["id"]: node for node in components}
             DesignPanel._asset_map = json.loads((DESIGN / "assets.json").read_text())
             for asset in set(DesignPanel._asset_map.values()):

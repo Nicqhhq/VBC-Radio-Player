@@ -21,7 +21,9 @@ No Windows, ative o ambiente com `.venv\Scripts\activate`. Neste workspace o amb
 - Clique duas vezes numa faixa para reproduzi-la. **Play**, **Stop**, **Pausa**, **Próximo**, volume e posição do áudio estão conectados ao Qt Multimedia.
 - **Espaço** alterna reprodução/pausa; **Ctrl+→** avança; **Ctrl+S** salva a lista; **Esc** retorna ao player.
 - **Automático** avança ao fim do áudio; **Manual** espera o operador. **Loop** repete a lista; **Aleatório** escolhe a próxima faixa.
-- Clique na árvore do explorador para escolher uma pasta local; use a busca para filtrar seus arquivos e clique duas vezes num áudio para adicioná-lo.
+- O explorador mantém o desenho do Figma, mas a árvore contém somente dados reais do computador. **Músicas**, **Pasta pessoal**, **Downloads**, **Documentos**, **Área de trabalho** e os volumes disponíveis no macOS ou Windows aparecem diretamente como raízes da árvore. Serviços ausentes, como OneDrive, não são exibidos.
+- Clique numa pasta para expandir seus filhos dentro da mesma árvore. A seta permite recolhê-la. O nome da pasta no caminho abre o seletor nativo. **Backspace** seleciona a pasta superior e **F5** atualiza o conteúdo.
+- A busca filtra nomes de áudio na pasta exibida e nas subpastas expandidas; as pastas continuam visíveis para navegação. Clique duas vezes num áudio para adicioná-lo, ou selecione vários e pressione **Enter**. O menu do botão direito também oferece **Adicionar selecionados**, navegação e atualização. **Ctrl+F** foca a busca.
 - **Nova lista**, **Abrir** e **Salvar** trabalham com playlists JSON. Arquivos de áudio não são copiados para o projeto.
 - **Agendador** executa eventos únicos com arquivos locais. Eventos existem somente durante a sessão e exigem o aplicativo aberto.
 - **Eventos** exibe ações e erros da sessão; **Relatórios** exporta as reproduções iniciadas em CSV.
@@ -60,6 +62,7 @@ vbc_player/
   services/
     playback.py                # Reprodução e fila compartilhadas
     playlist_storage.py        # Leitura e gravação de listas
+    filesystem_locations.py    # Pastas do usuário e volumes do sistema
 assets/
   figma/                       # 72 SVGs originais, usados localmente
   fonts/                       # Inter e licença OFL
@@ -81,7 +84,11 @@ Cada painel possui sua própria classe. As medidas do Figma são locais ao paine
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Os testes verificam navegação e geometria, integridade dos assets, reprodução de WAV, volume, remoção, avanço automático, agendamento e validação de playlists. Geram capturas da interface em `design/implementation-*.png`.
+Os testes verificam navegação e geometria, integridade dos assets, reprodução de WAV, volume, remoção, avanço automático, agendamento e validação de playlists. O explorador é testado com pastas temporárias, nomes Unicode, extensões em maiúsculas, busca, seleção múltipla, subpastas e atualização de arquivos. Geram capturas da interface em `design/implementation-*.png`.
+
+O workflow `.github/workflows/tests.yml` executa essa suíte em macOS e Windows no GitHub Actions após um push ou pull request. A validação local foi feita no macOS; a execução nativa no Windows depende desse workflow ou de uma máquina Windows.
+
+O explorador usa [QStandardPaths](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QStandardPaths.html), [QStorageInfo](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QStorageInfo.html) e os modelos de item do Qt. Ele respeita as permissões de leitura do sistema e mostra apenas pastas e os formatos de áudio aceitos pela interface.
 
 ## Limites atuais
 

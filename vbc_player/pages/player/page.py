@@ -1,3 +1,4 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from vbc_player.pages.player.widgets.clock import StudioClockWidget
@@ -11,10 +12,20 @@ from vbc_player.pages.player.widgets.transport import TransportWidget
 class PlayerPage(QWidget):
     def __init__(self, service, parent=None):
         super().__init__(parent)
+        self.setObjectName("playerPage")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        self.setStyleSheet("""
+            QWidget#playerPage { background: #0b0f17; }
+            QWidget#playerTopRow, QWidget#playerMiddleRow {
+                background: transparent;
+                border: none;
+            }
+        """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 18)
         layout.setSpacing(16)
         self.top = QWidget()
+        self.top.setObjectName("playerTopRow")
         top_layout = QHBoxLayout(self.top)
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(16)
@@ -26,6 +37,7 @@ class PlayerPage(QWidget):
             top_layout.addWidget(widget, stretch)
         layout.addWidget(self.top, 236)
         middle = QWidget()
+        middle.setObjectName("playerMiddleRow")
         middle_layout = QHBoxLayout(middle)
         middle_layout.setContentsMargins(0, 0, 0, 0)
         middle_layout.setSpacing(16)
