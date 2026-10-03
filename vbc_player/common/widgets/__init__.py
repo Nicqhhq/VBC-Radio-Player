@@ -1,0 +1,1 @@
+"""Widgets compartilhados da aplicação."""

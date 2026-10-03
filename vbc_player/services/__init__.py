@@ -1,0 +1,1 @@
+"""Serviços independentes das páginas."""
