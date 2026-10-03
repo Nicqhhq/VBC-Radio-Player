@@ -1,22 +1,28 @@
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QDir, QFileInfo, QModelIndex, QRectF, QSortFilterProxyModel, Qt, Signal,
+    QDir, QFileInfo, QMimeData, QModelIndex, QRectF, QSortFilterProxyModel,
+    Qt, QUrl, Signal,
 )
-from PySide6.QtGui import QKeySequence, QShortcut, QStandardItem, QStandardItemModel
+from PySide6.QtGui import QDrag, QKeySequence, QShortcut, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QAbstractItemView, QFileDialog, QFileIconProvider, QLabel, QLineEdit,
     QMenu, QTreeView,
 )
 
 from vbc_player.common.widgets.design_panel import DesignPanel
+from vbc_player.models import AUDIO_EXTENSIONS
 from vbc_player.services.filesystem_locations import default_directory, standard_locations
 
-AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac"}
 PATH_ROLE = Qt.ItemDataRole.UserRole + 1
 DIRECTORY_ROLE = Qt.ItemDataRole.UserRole + 2
 LOADED_ROLE = Qt.ItemDataRole.UserRole + 3
 PLACEHOLDER_ROLE = Qt.ItemDataRole.UserRole + 4
+
+
+def normalized_path(path):
+    info = QFileInfo(path)
+    return QDir.cleanPath(info.canonicalFilePath() or info.absoluteFilePath())
 
 
 class LocationsModel(QStandardItemModel):
@@ -46,10 +52,10 @@ class LocationsModel(QStandardItemModel):
         return item.index()
 
     def index_for_path(self, path, parent=QModelIndex()):
-        target = QDir.cleanPath(path)
+        target = normalized_path(path)
         for row in range(self.rowCount(parent)):
             index = self.index(row, 0, parent)
-            if QDir.cleanPath(index.data(PATH_ROLE) or "") == target:
+            if normalized_path(index.data(PATH_ROLE) or "") == target:
                 return index
         return QModelIndex()
 
@@ -116,6 +122,22 @@ class AudioFileFilter(QSortFilterProxyModel):
 class AudioTreeView(QTreeView):
     add_requested = Signal()
 
+    def startDrag(self, supported_actions):
+        entries = []
+        for index in self.selectionModel().selectedRows(0):
+            path = index.data(PATH_ROLE)
+            if path and Path(path).exists():
+                entries.append((path, bool(index.data(DIRECTORY_ROLE))))
+        files = [path for path, is_directory in entries if not is_directory]
+        paths = files or [path for path, _is_directory in entries]
+        if not paths:
+            return
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(path) for path in paths])
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.CopyAction)
+
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.add_requested.emit()
@@ -161,6 +183,9 @@ class FileExplorerWidget(DesignPanel):
         self.tree.setHeaderHidden(True)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tree.setDragEnabled(True)
+        self.tree.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+        self.tree.setDefaultDropAction(Qt.DropAction.CopyAction)
         self.tree.setUniformRowHeights(True)
         self.tree.setExpandsOnDoubleClick(True)
         self.tree.setIndentation(16)
@@ -205,7 +230,7 @@ class FileExplorerWidget(DesignPanel):
         self.expand_location(default_directory())
         self.setToolTip(
             "Somente locais reais são exibidos. Clique numa pasta para expandi-la "
-            "na árvore; dois cliques num áudio o adicionam à playlist."
+            "na árvore; arraste áudios ou pastas para a playlist."
         )
 
     def refresh_locations(self):
@@ -298,6 +323,7 @@ class FileExplorerWidget(DesignPanel):
             self._update_status(index)
 
     def activate_index(self, index):
+        self.tree.setCurrentIndex(index)
         source = self.proxy.mapToSource(index)
         if source.data(DIRECTORY_ROLE):
             self.expand_folder(index)
@@ -322,6 +348,15 @@ class FileExplorerWidget(DesignPanel):
                 if path and Path(path).suffix.casefold() in AUDIO_EXTENSIONS:
                     paths.append(path)
         return paths
+
+    def selected_import_paths(self):
+        entries = []
+        for index in self.tree.selectionModel().selectedRows(0):
+            path = index.data(PATH_ROLE)
+            if path and Path(path).exists():
+                entries.append((path, bool(index.data(DIRECTORY_ROLE))))
+        files = [path for path, is_directory in entries if not is_directory]
+        return files or [path for path, _is_directory in entries]
 
     def filter_files(self, query):
         self.proxy.set_query(query)
@@ -362,8 +397,8 @@ class FileExplorerWidget(DesignPanel):
         menu = QMenu(self)
         if index.isValid() and index.data(DIRECTORY_ROLE):
             menu.addAction("Expandir pasta", lambda: self.expand_folder(index))
-        add = menu.addAction("Adicionar áudios selecionados", self.add_selected)
-        add.setEnabled(bool(self.selected_audio_paths()))
+        add = menu.addAction("Adicionar áudios ou pastas selecionados", self.add_selected)
+        add.setEnabled(bool(self.selected_import_paths()))
         menu.addSeparator()
         menu.addAction("Escolher outra pasta…", self.choose_folder)
         menu.addAction("Atualizar", self.refresh)
@@ -378,14 +413,9 @@ class FileExplorerWidget(DesignPanel):
             self.status.setText(f"{count} locais reais • Ctrl+F")
 
     def add_selected(self):
-        self._add_paths(self.selected_audio_paths())
+        self._add_paths(self.selected_import_paths())
 
     def _add_paths(self, paths):
-        valid = [
-            path for path in paths
-            if path and Path(path).is_file()
-            and Path(path).suffix.casefold() in AUDIO_EXTENSIONS
-        ]
-        if valid:
-            self.service.add_tracks(valid)
-            self.status.setText(f"{len(valid)} áudio(s) enviado(s) à playlist.")
+        added = self.service.add_tracks(paths)
+        if added:
+            self.status.setText(f"{added} áudio(s) enviado(s) à playlist.")

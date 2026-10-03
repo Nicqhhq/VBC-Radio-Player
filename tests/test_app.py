@@ -8,17 +8,18 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QDateTime, QEventLoop, QItemSelectionModel, QPersistentModelIndex, QTimer
+from PySide6.QtCore import QDateTime, QEventLoop, QItemSelectionModel, QMimeData, QPersistentModelIndex, QTimer, QUrl
 from PySide6.QtGui import QFont, QFontDatabase, QFontMetricsF
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QApplication
 
 from vbc_player.main_window import MainWindow
-from vbc_player.models import Track
+from vbc_player.models import Track, collect_audio_paths
 from vbc_player.services.playlist_storage import read_playlist, save_playlist
 from vbc_player.theme import ASSETS, DESIGN, STYLESHEET
 from vbc_player.common.widgets.design_panel import DesignPanel, descendants
 from vbc_player.pages.player.widgets.explorer import PATH_ROLE
+from vbc_player.pages.player.widgets.playlist import local_paths
 from vbc_player.services.filesystem_locations import standard_locations
 
 
@@ -121,6 +122,31 @@ class ApplicationTests(unittest.TestCase):
             service.remove(0)
             self.assertEqual(service.tracks, [])
             self.assertEqual(service.index, -1)
+
+    def test_audio_folders_and_drag_drop_are_supported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            nested = root / "Álbum" / "Disco 1"
+            nested.mkdir(parents=True)
+            first = root / "Álbum" / "01 - Abertura.MP3"
+            second = nested / "02 - Música.flac"
+            ignored = nested / "capa.jpg"
+            first.write_bytes(b"audio")
+            second.write_bytes(b"audio")
+            ignored.write_bytes(b"image")
+
+            self.assertEqual(collect_audio_paths([root / "Álbum"]), [str(first.resolve()), str(second.resolve())])
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(str(root / "Álbum"))])
+            playlist = self.window.player_page.playlist
+            self.assertEqual(local_paths(mime), [str(root / "Álbum")])
+            playlist.table.paths_dropped.emit(local_paths(mime))
+            self.assertEqual(
+                [track.path for track in self.window.service.tracks],
+                [str(first.resolve()), str(second.resolve())],
+            )
+            self.assertTrue(playlist.table.acceptDrops())
+            self.assertTrue(self.window.player_page.explorer.tree.dragEnabled())
 
     def test_storage_round_trip_and_invalid_input(self):
         with tempfile.TemporaryDirectory() as folder:

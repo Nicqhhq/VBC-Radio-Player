@@ -1,8 +1,45 @@
+from pathlib import Path
+
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QAbstractItemView, QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem
 
 from vbc_player.common.widgets.design_panel import DesignPanel
+
+
+def local_paths(mime_data):
+    if not mime_data.hasUrls():
+        return []
+    return [
+        url.toLocalFile()
+        for url in mime_data.urls()
+        if url.isLocalFile() and Path(url.toLocalFile()).exists()
+    ]
+
+
+class PlaylistTable(QTableWidget):
+    paths_dropped = Signal(list)
+
+    def dragEnterEvent(self, event):
+        if local_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if local_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        paths = local_paths(event.mimeData())
+        if not paths:
+            event.ignore()
+            return
+        self.paths_dropped.emit(paths)
+        event.setDropAction(Qt.DropAction.CopyAction)
+        event.accept()
 
 
 class PlaylistWidget(DesignPanel):
@@ -15,7 +52,9 @@ class PlaylistWidget(DesignPanel):
         self.button("Adicionar áudio", self.local_rect("17:545"), self.import_audio)
         self.button("Remover item selecionado", self.local_rect("17:547"), self.remove_selected)
         self.button("Propriedades do item", self.local_rect("17:549"), self.properties)
-        self.table = QTableWidget(0, 8, self)
+        self.setAcceptDrops(True)
+        self.table = PlaylistTable(0, 8, self)
+        self.table.setAcceptDrops(True)
         self.table.setHorizontalHeaderLabels(["#", "TIPO", "ARQUIVO / TÍTULO", "DURAÇÃO", "INÍCIO", "FIM", "STATUS", ""])
         self.table.setColumnHidden(7, True)
         self.table.verticalHeader().hide()
@@ -29,10 +68,32 @@ class PlaylistWidget(DesignPanel):
         self.table.setAccessibleName("Lista de reprodução")
         self.table.cellDoubleClicked.connect(lambda row, _col: service.play_index(row))
         self.table.itemSelectionChanged.connect(self._selected)
+        self.table.paths_dropped.connect(self.add_tracks)
         self.add_control(self.table, QRectF(12, 44, 986, 312))
         self.table.hide()
         service.queue_changed.connect(self.refresh)
-        self.setToolTip("Lista inicial: referência do Figma, sem arquivos de áudio. Adicione seus arquivos para reproduzir.")
+        self.setToolTip("Arraste arquivos de áudio ou pastas do explorador para adicionar à lista.")
+
+    def dragEnterEvent(self, event):
+        if local_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if local_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        paths = local_paths(event.mimeData())
+        if not paths:
+            event.ignore()
+            return
+        self.add_tracks(paths)
+        event.setDropAction(Qt.DropAction.CopyAction)
+        event.accept()
 
     def import_audio(self):
         paths, _ = QFileDialog.getOpenFileNames(self, "Adicionar áudios", "", "Áudio (*.mp3 *.wav *.flac *.ogg *.m4a *.aac);;Todos os arquivos (*)")

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from vbc_player.models import Track, demo_tracks
+from vbc_player.models import Track, collect_audio_paths, demo_tracks
 import random
 
 
@@ -34,18 +34,22 @@ class PlaybackService(QObject):
         )
 
     def add_tracks(self, paths):
-        valid = [str(Path(path).resolve()) for path in paths if Path(path).is_file()]
+        valid = collect_audio_paths(paths)
         if not valid:
-            return
+            return 0
         if self.demo:
             self.tracks = []
             self.demo = False
         existing = {track.path for track in self.tracks}
+        added = 0
         for path in valid:
             if path not in existing:
                 self.tracks.append(Track.from_path(path))
                 existing.add(path)
-        self.queue_changed.emit()
+                added += 1
+        if added:
+            self.queue_changed.emit()
+        return added
 
     def play_index(self, index):
         if not 0 <= index < len(self.tracks):
