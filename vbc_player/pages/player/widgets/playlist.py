@@ -2,7 +2,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QAbstractItemView, QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import (
+    QAbstractItemView, QFileDialog, QMessageBox, QStyle, QStyledItemDelegate,
+    QStyleOptionViewItem, QTableWidget, QTableWidgetItem,
+)
 
 from vbc_player.common.widgets.design_panel import DesignPanel
 
@@ -42,6 +45,16 @@ class PlaylistTable(QTableWidget):
         event.accept()
 
 
+class PlaylistItemDelegate(QStyledItemDelegate):
+    """Mantém a seleção funcional sem pintar o destaque azul do sistema."""
+
+    def paint(self, painter, option, index):
+        clean_option = QStyleOptionViewItem(option)
+        clean_option.state &= ~QStyle.StateFlag.State_Selected
+        clean_option.state &= ~QStyle.StateFlag.State_HasFocus
+        super().paint(painter, clean_option, index)
+
+
 class PlaylistWidget(DesignPanel):
     import_requested = Signal()
 
@@ -60,6 +73,7 @@ class PlaylistWidget(DesignPanel):
         self.table.verticalHeader().hide()
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setItemDelegate(PlaylistItemDelegate(self.table))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
         self.table.setStyleSheet("QTableWidget{background:#111827;border:0;padding:0;font-size:11px;} QHeaderView::section{background:#182335;color:#64748b;border:0;padding:8px;font-size:10px;} QTableWidget::item{padding:4px;}")

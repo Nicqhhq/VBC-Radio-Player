@@ -19,7 +19,7 @@ from vbc_player.services.playlist_storage import read_playlist, save_playlist
 from vbc_player.theme import ASSETS, DESIGN, STYLESHEET
 from vbc_player.common.widgets.design_panel import DesignPanel, descendants
 from vbc_player.pages.player.widgets.explorer import PATH_ROLE
-from vbc_player.pages.player.widgets.playlist import local_paths
+from vbc_player.pages.player.widgets.playlist import PlaylistItemDelegate, local_paths
 from vbc_player.services.filesystem_locations import standard_locations
 
 
@@ -109,6 +109,12 @@ class ApplicationTests(unittest.TestCase):
             self.assertEqual(len(service.tracks), 1)
             self.assertFalse(service.demo)
             self.assertEqual(self.window.player_page.playlist.table.rowCount(), 1)
+            self.window.player_page.playlist.table.selectRow(0)
+            self.assertEqual(self.window.player_page.playlist.table.currentRow(), 0)
+            self.assertIsInstance(
+                self.window.player_page.playlist.table.itemDelegate(),
+                PlaylistItemDelegate,
+            )
             service.play_index(0)
             wait(300)
             self.assertEqual(errors, [])
