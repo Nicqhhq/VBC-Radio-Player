@@ -9,7 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QDateTime, QEventLoop, QItemSelectionModel, QPersistentModelIndex, QTimer
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QFont, QFontDatabase, QFontMetricsF
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QApplication
 
@@ -65,6 +65,17 @@ class ApplicationTests(unittest.TestCase):
         for panel in (self.window.player_page.on_air, self.window.player_page.transport):
             for widget, _ in panel.overlays:
                 self.assertTrue(panel.rect().contains(widget.geometry()), widget.accessibleName())
+
+    def test_studio_clock_shows_seconds_without_elision(self):
+        clock = self.window.player_page.clock
+        clock._tick()
+        node = clock.nodes["17:447"]
+        self.assertRegex(node["t"], r"^\d{2}:\d{2}:\d{2}$")
+        font = QFont(node["f"])
+        font.setPixelSize(round(node["s"]))
+        font.setWeight(QFont.Weight(node["w"]))
+        widest_time = QFontMetricsF(font).horizontalAdvance("00:00:00")
+        self.assertGreaterEqual(clock.local_rect("17:447").width() + 2, widest_time)
 
     def test_original_assets(self):
         for asset in set(DesignPanel._asset_map.values()):
