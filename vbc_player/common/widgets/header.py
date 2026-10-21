@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from vbc_player.common.widgets.design_panel import DesignPanel
 
 
@@ -17,6 +18,17 @@ class HeaderWidget(DesignPanel):
 
     def _maximize(self):
         self.window.showNormal() if self.window.isMaximized() else self.window.showMaximized()
+
+    def paintEvent(self, event):
+        if self.window.isMaximized() or self.window.isFullScreen():
+            # Completa o gradiente nos cantos arredondados do SVG original.
+            painter = QPainter(self)
+            gradient = QLinearGradient(0, 0, self.width(), 0)
+            gradient.setColorAt(0, QColor("#111827"))
+            gradient.setColorAt(1, QColor("#1e293b"))
+            painter.fillRect(self.rect(), gradient)
+            painter.end()
+        super().paintEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.window.windowHandle():

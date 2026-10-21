@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QRectF, QSettings, Qt
-from PySide6.QtGui import QKeySequence, QPainterPath, QRegion, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPainterPath, QRegion, QShortcut
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QSizeGrip, QStackedWidget, QVBoxLayout, QWidget
 
@@ -97,6 +97,14 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
             self._update_window_shape()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.isMaximized() or self.isFullScreen():
+            # Os SVGs também têm cantos transparentes: remover apenas a
+            # máscara não preenche esses pixels quando a janela ocupa a tela.
+            painter = QPainter(self)
+            painter.fillRect(self.rect(), QColor("#0b0f17"))
 
     def _remember_playlist(self, path):
         self.playlist_path = str(Path(path).resolve())
