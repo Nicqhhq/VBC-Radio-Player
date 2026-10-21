@@ -17,14 +17,14 @@ No Windows, ative o ambiente com `.venv\Scripts\activate`. Neste workspace o amb
 
 ## Uso
 
-- A lista inicial é uma referência visual do Figma; não inclui as músicas. Clique em **Adicionar** ou use **Ctrl+O** para importar áudio. A primeira importação substitui a referência pelos arquivos reais.
+- Na primeira execução, a lista começa vazia. Clique em **Adicionar** ou use **Ctrl+O** para importar áudio. Ao salvar ou abrir uma playlist, ela se torna a lista padrão e é reaberta nas próximas execuções, sem iniciar a reprodução automaticamente.
 - Clique duas vezes numa faixa para reproduzi-la. **Play**, **Stop**, **Pausa**, **Próximo**, volume e posição do áudio estão conectados ao Qt Multimedia.
 - **Espaço** alterna reprodução/pausa; **Ctrl+→** avança; **Ctrl+S** salva a lista; **Esc** retorna ao player.
 - **Automático** avança ao fim do áudio; **Manual** espera o operador. **Loop** repete a lista; **Aleatório** escolhe a próxima faixa.
 - O explorador mantém o desenho do Figma, mas a árvore contém somente dados reais do computador. **Músicas**, **Pasta pessoal**, **Downloads**, **Documentos**, **Área de trabalho** e os volumes disponíveis no macOS ou Windows aparecem diretamente como raízes da árvore. Serviços ausentes, como OneDrive, não são exibidos.
 - Clique numa pasta para expandir seus filhos dentro da mesma árvore. A seta permite recolhê-la. O nome da pasta no caminho abre o seletor nativo. **Backspace** seleciona a pasta superior e **F5** atualiza o conteúdo.
 - A busca filtra nomes de áudio na pasta exibida e nas subpastas expandidas; as pastas continuam visíveis para navegação. Clique duas vezes num áudio para adicioná-lo, ou selecione vários e pressione **Enter**. O menu do botão direito também oferece **Adicionar selecionados**, navegação e atualização. **Ctrl+F** foca a busca.
-- **Nova lista**, **Abrir** e **Salvar** trabalham com playlists JSON. Arquivos de áudio não são copiados para o projeto.
+- **Nova lista**, **Abrir** e **Salvar** trabalham com playlists JSON. **Nova lista** limpa a fila e a escolha da lista padrão; salvar ou abrir outra lista define o novo padrão. Alterações só ficam no arquivo após **Salvar**. Se a lista padrão estiver indisponível ou inválida, o aplicativo abre vazio e registra o erro em **Eventos**, mantendo o caminho para tentar novamente na próxima execução. Arquivos de áudio não são copiados para o projeto.
 - **Agendador** executa eventos únicos com arquivos locais. Eventos existem somente durante a sessão e exigem o aplicativo aberto.
 - **Eventos** exibe ações e erros da sessão; **Relatórios** exporta as reproduções iniciadas em CSV.
 - Arraste o cabeçalho para mover a janela. Os botões de minimizar, maximizar/restaurar e fechar funcionam; o canto inferior direito permite redimensionar.
@@ -37,7 +37,7 @@ vbc_player/
   app.py                       # Inicialização, fonte e tema
   main_window.py               # Composição e navegação
   theme.py                     # Paths e estilo das páginas auxiliares
-  models.py                    # Modelo de faixa e dados de demonstração
+  models.py                    # Modelo de faixa e coleta de arquivos de áudio
   pages/
     player/
       page.py
@@ -92,6 +92,10 @@ O explorador usa [QStandardPaths](https://doc.qt.io/qtforpython-6/PySide6/QtCore
 
 ## Limites atuais
 
-AGC e medidores estéreo mantêm as leituras demonstrativas do design; não processam nem medem o áudio. Crossfade é uma referência visual e não mistura faixas. Satélite não está conectado. O relógio e o nome da saída usam os valores reais do computador. Não há streaming, gravação, persistência dos eventos ou recuperação de sessão nesta versão. A disponibilidade de formatos depende dos codecs do Qt e do sistema.
+O botão AGC abre o painel de monitoramento do Figma, com chave liga/desliga (bypass), RMS de entrada/saída em dBFS e ganho efetivo. As medições são anteriores ao volume master. O processamento usa a reconstrução analítica fornecida do callback `0x407b60` do ZaraRadio 1.6.2, associada ao executável SHA256 `344a74a8c04a41d5470b6158b234d129df150b9f397047375842c19eeeaeb97b`. Não é código-fonte original nem uma reprodução bit a bit do x87.
 
-Reprodução usa [QMediaPlayer](https://doc.qt.io/qtforpython-6/PySide6/QtMultimedia/QMediaPlayer.html) e [QAudioOutput](https://doc.qt.io/qtforpython-6/PySide6/QtMultimedia/QAudioOutput.html), conforme a documentação oficial do Qt.
+O Qt entrega PCM16 estéreo a 44,1 kHz via `QAudioBufferOutput`; o áudio é reagrupado em blocos de 1024 frames (bloco curto apenas no fim) e enviado a `QAudioSink`. A saída nativa do player fica muda para evitar duplicação. A memória do AGC reinicia em stop, busca, troca de faixa/saída e ao alternar bypass. A comparação com o DSP original exige as mesmas fronteiras de chamadas. O teto é 28.300 PCM16 (aproximadamente −1,3 dBFS); o algoritmo não tem alvo fixo de −14 dBFS. Sem dispositivo de saída, o DSP e as medições continuam, sem acumular áudio. A saída deve aceitar PCM16 estéreo a 44,1 kHz e o backend Qt deve ser FFmpeg.
+
+Os medidores L/R do relógio mostram RMS real de cada canal após AGC/bypass e volume master, na escala de −60 a 0 dBFS, com subida rápida e queda suave. Pausa, stop, busca e ausência de novos blocos fazem as barras retornar ao silêncio. O rótulo MASTER acompanha o volume real. Crossfade é uma referência visual e não mistura faixas. Satélite não está conectado. O relógio e o nome da saída usam os valores reais do computador. Não há streaming, gravação, persistência dos eventos ou recuperação de sessão nesta versão. A disponibilidade de formatos depende dos codecs do Qt e do sistema.
+
+Reprodução usa [QMediaPlayer](https://doc.qt.io/qtforpython-6/PySide6/QtMultimedia/QMediaPlayer.html), [QAudioBufferOutput](https://doc.qt.io/qt-6/qaudiobufferoutput.html) e [QAudioSink](https://doc.qt.io/qt-6/qaudiosink.html), conforme a documentação oficial do Qt.

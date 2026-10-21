@@ -1,5 +1,7 @@
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from pathlib import Path
+
+from PySide6.QtCore import QEvent, QRectF, QSettings, Qt
+from PySide6.QtGui import QKeySequence, QPainterPath, QRegion, QShortcut
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QSizeGrip, QStackedWidget, QVBoxLayout, QWidget
 
@@ -15,10 +17,15 @@ from vbc_player.common.widgets.design_panel import DesignPanel
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, settings=None):
         super().__init__()
+        self.settings = settings if settings is not None else QSettings("VBC", "VBC Player")
+        self.playlist_path = None
         self.setWindowTitle("VBC Player - Automação de Rádio")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setObjectName("mainWindow")
+        self.setStyleSheet("QMainWindow#mainWindow { background: transparent; }")
         self.resize(1440, 900)
         self.setMinimumSize(1100, 690)
         self.service = PlaybackService(self)
@@ -67,6 +74,47 @@ class MainWindow(QMainWindow):
             self.shortcuts.append(shortcut)
         self.grip = QSizeGrip(self)
         self.grip.setStyleSheet("background:transparent;")
+        self._restore_playlist()
+        self._update_window_shape()
+
+    def _update_window_shape(self):
+        root = self.centralWidget()
+        if root is None:
+            return
+        if self.isMaximized() or self.isFullScreen():
+            self.clearMask()
+            root.clearMask()
+        else:
+            # Recorta também as páginas e o cabeçalho, que pintam fundos
+            # próprios e antes preenchiam os cantos do SVG arredondado.
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(root.rect()), 18, 18)
+            shape = QRegion(path.toFillPolygon().toPolygon())
+            root.setMask(shape)
+            self.setMask(shape.translated(root.pos()))
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._update_window_shape()
+
+    def _remember_playlist(self, path):
+        self.playlist_path = str(Path(path).resolve())
+        self.settings.setValue("playlist/default_path", self.playlist_path)
+        self.settings.sync()
+
+    def _restore_playlist(self):
+        path = self.settings.value("playlist/default_path", "", type=str)
+        if not path:
+            return
+        try:
+            tracks = read_playlist(path)
+        except (OSError, ValueError, TypeError) as error:
+            self.events_page.add_event(f"Não foi possível restaurar a lista padrão {path}: {error}")
+            return
+        self.playlist_path = path
+        self.service.tracks = tracks
+        self.service.queue_changed.emit()
 
     def _refresh_device(self):
         device = self.service.output.device()
@@ -80,6 +128,9 @@ class MainWindow(QMainWindow):
 
     def new_playlist(self):
         self.service.clear()
+        self.playlist_path = None
+        self.settings.remove("playlist/default_path")
+        self.settings.sync()
         self.show_page("player")
 
     def open_playlist(self):
@@ -94,15 +145,18 @@ class MainWindow(QMainWindow):
         self.service.clear()
         self.service.tracks = tracks
         self.service.queue_changed.emit()
+        self._remember_playlist(path)
         self.show_page("player")
 
     def save_playlist(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Salvar lista", "vbc-playlist.json", "Lista VBC (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar lista", self.playlist_path or "vbc-playlist.json", "Lista VBC (*.json)")
         if path:
             try:
                 save_playlist(path, self.service.tracks)
             except OSError as error:
                 self.show_error(str(error))
+                return
+            self._remember_playlist(path)
 
     def show_error(self, message):
         self.events_page.add_event(message)
@@ -110,6 +164,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._update_window_shape()
         if hasattr(self, "grip"):
             self.grip.setGeometry(self.width()-16, self.height()-16, 16, 16)
 

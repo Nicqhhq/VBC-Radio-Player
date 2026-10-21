@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView, QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem,
+    QAbstractItemView, QFileDialog, QStyledItemDelegate,
+    QTableWidget, QTableWidgetItem,
 )
 
 from vbc_player.common.widgets.design_panel import DesignPanel
@@ -21,6 +22,26 @@ def local_paths(mime_data):
 
 class PlaylistTable(QTableWidget):
     paths_dropped = Signal(list)
+    hovered_row_changed = Signal(int)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._hovered_row = -1
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+    def mouseMoveEvent(self, event):
+        row = self.indexAt(event.position().toPoint()).row()
+        if row != self._hovered_row:
+            self._hovered_row = row
+            self.hovered_row_changed.emit(row)
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        if self._hovered_row != -1:
+            self._hovered_row = -1
+            self.hovered_row_changed.emit(-1)
+        super().leaveEvent(event)
 
     def dragEnterEvent(self, event):
         if local_paths(event.mimeData()):
@@ -44,6 +65,23 @@ class PlaylistTable(QTableWidget):
         event.accept()
 
 
+class PlaylistItemDelegate(QStyledItemDelegate):
+    """Pinta o estado da linha sem usar o destaque nativo do sistema."""
+
+    def paint(self, painter, option, index):
+        background = index.data(Qt.ItemDataRole.BackgroundRole)
+        color = background.color() if background is not None else QColor("#111827")
+        painter.save()
+        painter.fillRect(option.rect, color)
+        painter.setPen(QColor("#cbd5e1"))
+        painter.drawText(
+            option.rect.adjusted(8, 0, -8, 0),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            str(index.data(Qt.ItemDataRole.DisplayRole) or ""),
+        )
+        painter.restore()
+
+
 class PlaylistWidget(DesignPanel):
     import_requested = Signal()
 
@@ -51,9 +89,9 @@ class PlaylistWidget(DesignPanel):
         super().__init__("24:8", parent)
         self.service = service
         self.selected = 0
+        self.hovered_row = -1
         self.button("Adicionar áudio", self.local_rect("17:545"), self.import_audio)
         self.button("Remover item selecionado", self.local_rect("17:547"), self.remove_selected)
-        self.button("Propriedades do item", self.local_rect("17:549"), self.properties)
         self.setAcceptDrops(True)
         self.table = PlaylistTable(0, 8, self)
         self.table.setAcceptDrops(True)
@@ -62,6 +100,7 @@ class PlaylistWidget(DesignPanel):
         self.table.verticalHeader().hide()
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setItemDelegate(PlaylistItemDelegate(self.table))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
         self.table.setStyleSheet("""
@@ -71,7 +110,6 @@ class PlaylistWidget(DesignPanel):
                 padding: 0;
                 font-size: 11px;
                 outline: 0;
-                selection-background-color: #1e293b;
                 selection-color: #f4f7fc;
             }
             QHeaderView::section {
@@ -85,26 +123,19 @@ class PlaylistWidget(DesignPanel):
                 padding: 4px;
                 border: 0;
             }
-            QTableWidget::item:hover {
-                background: #192538;
-                color: #e2e8f0;
-            }
-            QTableWidget::item:selected {
-                background: #1e293b;
-                color: #f4f7fc;
-                border: 0;
-            }
         """)
         self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setAccessibleName("Lista de reprodução")
         self.table.cellDoubleClicked.connect(lambda row, _col: service.play_index(row))
         self.table.itemSelectionChanged.connect(self._selected)
+        self.table.hovered_row_changed.connect(self._hovered)
         self.table.paths_dropped.connect(self.add_tracks)
         self.add_control(self.table, QRectF(12, 44, 986, 312))
         self.table.hide()
         service.queue_changed.connect(self.refresh)
         self.setToolTip("Arraste arquivos de áudio ou pastas do explorador para adicionar à lista.")
+        self.refresh()
 
     def dragEnterEvent(self, event):
         if local_paths(event.mimeData()):
@@ -137,21 +168,38 @@ class PlaylistWidget(DesignPanel):
     def remove_selected(self):
         self.service.remove(self.selected)
 
-    def properties(self):
-        if 0 <= self.selected < len(self.service.tracks):
-            track = self.service.tracks[self.selected]
-            QMessageBox.information(self, "Propriedades", f"{track.title}\n\nTipo: {track.kind}\nArquivo: {track.path or 'Referência visual — sem áudio'}")
-
     def _selected(self):
         self.selected = self.table.currentRow()
+        self._apply_row_colors()
+
+    def _hovered(self, row):
+        self.hovered_row = row
+        self._apply_row_colors()
+
+    def _row_color(self, row):
+        if row == self.service.index:
+            return QColor("#421c24")
+        if row == self.service.index + 1:
+            return QColor("#113a32")
+        if row == self.selected:
+            return QColor("#1e293b")
+        if row == self.hovered_row:
+            return QColor("#192538")
+        return QColor("#141d2b" if row % 2 == 0 else "#111827")
+
+    def _apply_row_colors(self):
+        for row in range(self.table.rowCount()):
+            color = self._row_color(row)
+            for column in range(self.table.columnCount()):
+                item = self.table.item(row, column)
+                if item is not None:
+                    item.setBackground(color)
+        self.table.viewport().update()
 
     def refresh(self):
-        if self.service.demo:
-            self.update()
-            return
         # Hide the original demo header/rows, while reusing the frame and actions.
         for node in self.design.get("c", []):
-            if node["id"] not in {"17:481", "17:482", "17:483", "17:545", "17:546", "17:547", "17:548", "17:549", "17:550"}:
+            if node["id"] not in {"17:481", "17:482", "17:483", "17:545", "17:546", "17:547", "17:548"}:
                 self.hidden.add(node["id"])
         self.table.show()
         self.table.setRowCount(len(self.service.tracks))
@@ -160,13 +208,9 @@ class PlaylistWidget(DesignPanel):
             values = [f"{row+1:02d}", track.kind, track.title, duration, track.start, track.end, track.status]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setBackground(QColor("#141d2b" if row % 2 == 0 else "#111827"))
-                if row == self.service.index:
-                    item.setBackground(QColor("#421c24"))
-                elif row == self.service.index+1:
-                    item.setBackground(QColor("#113a32"))
                 self.table.setItem(row, col, item)
             self.table.setRowHeight(row, 46)
+        self._apply_row_colors()
         self.table.setColumnWidth(0, 40)
         self.table.setColumnWidth(1, 86)
         self.table.setColumnWidth(2, max(140, self.table.width()-480))
@@ -174,16 +218,3 @@ class PlaylistWidget(DesignPanel):
             self.table.setColumnWidth(col, 82)
         self.set_text("17:483", f"{len(self.service.tracks)} itens")
         self.update()
-
-    def mousePressEvent(self, event):
-        if self.service.demo:
-            y = event.position().y()*self.design_height/self.height()
-            row = int((y-80)/46)
-            if 0 <= row < len(self.service.tracks):
-                self.selected = row
-        super().mousePressEvent(event)
-
-    def mouseDoubleClickEvent(self, event):
-        if self.service.demo:
-            self.service.play_index(self.selected)
-        super().mouseDoubleClickEvent(event)

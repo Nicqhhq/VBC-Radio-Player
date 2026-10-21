@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QDir, QFileInfo, QMimeData, QModelIndex, QRectF, QSortFilterProxyModel,
+    QDir, QFileInfo, QMimeData, QModelIndex, QPointF, QRectF, QSortFilterProxyModel,
     Qt, QUrl, Signal,
 )
-from PySide6.QtGui import QDrag, QKeySequence, QShortcut, QStandardItem, QStandardItemModel
+from PySide6.QtGui import QColor, QDrag, QKeySequence, QPainter, QPen, QPolygonF, QShortcut, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QAbstractItemView, QFileDialog, QFileIconProvider, QLabel, QLineEdit,
     QMenu, QTreeView,
@@ -122,6 +122,25 @@ class AudioFileFilter(QSortFilterProxyModel):
 class AudioTreeView(QTreeView):
     add_requested = Signal()
 
+    def drawBranches(self, painter, rect, index):
+        # O estilo nativo do macOS pode desenhar uma faixa cinza no recuo,
+        # mesmo com QTreeView::branch transparente. Pinta o slot inteiro.
+        selected = self.selectionModel().isSelected(index)
+        painter.fillRect(rect, QColor("#173a68" if selected else "#111c2d"))
+        if not self.model().hasChildren(index):
+            return
+        center = QPointF(rect.right() - self.indentation() / 2 + 1, rect.center().y())
+        if self.isExpanded(index):
+            offsets = ((-3, -1.5), (0, 1.5), (3, -1.5))
+        else:
+            offsets = ((-1.5, -3), (1.5, 0), (-1.5, 3))
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#f2f5fa" if selected else "#91a2b9"), 1.4,
+                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        painter.drawPolyline(QPolygonF([center + QPointF(x, y) for x, y in offsets]))
+        painter.restore()
+
     def startDrag(self, supported_actions):
         entries = []
         for index in self.selectionModel().selectedRows(0):
@@ -195,7 +214,18 @@ class FileExplorerWidget(DesignPanel):
             QTreeView::item{height:25px;border:0;}
             QTreeView::item:selected{background:#173a68;color:#f2f5fa;}
             QTreeView::item:hover{background:#162c50;}
-            QTreeView::branch{background:transparent;}
+            QTreeView::branch{background:#111c2d;}
+            QTreeView QScrollBar:vertical{background:#111c2d;width:9px;margin:0;border:0;}
+            QTreeView QScrollBar:horizontal{background:#111c2d;height:9px;margin:0;border:0;}
+            QTreeView QScrollBar::handle{background:#3b4d67;border-radius:4px;}
+            QTreeView QScrollBar::handle:vertical{min-height:26px;}
+            QTreeView QScrollBar::handle:horizontal{min-width:26px;}
+            QTreeView QScrollBar::handle:hover{background:#59708f;}
+            QTreeView QScrollBar::add-line,QTreeView QScrollBar::sub-line{
+                width:0;height:0;border:0;background:transparent;}
+            QTreeView QScrollBar::add-page,QTreeView QScrollBar::sub-page{
+                background:transparent;}
+            QTreeView QAbstractScrollArea::corner{background:#111c2d;border:0;}
         """)
         self.add_control(self.tree, QRectF(18, 142, 340, 198))
         self.tree.expanded.connect(self.load_folder)

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QProgressBar, QSlider
 
@@ -10,6 +11,27 @@ from vbc_player.common.widgets.design_panel import DesignPanel
 def timecode(ms):
     ms = max(0, ms)
     return f"{ms//60000:02d}:{ms//1000%60:02d}.{ms//100%10}"
+
+
+class RoundedProgressBar(QProgressBar):
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        bounds = QRectF(self.rect())
+        radius = bounds.height() / 2
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#26344a"))
+        painter.drawRoundedRect(bounds, radius, radius)
+
+        span = self.maximum() - self.minimum()
+        ratio = (self.value() - self.minimum()) / span if span else 0
+        fill_width = bounds.width() * max(0.0, min(1.0, ratio))
+        if fill_width > 0:
+            fill = QRectF(bounds.left(), bounds.top(), fill_width, bounds.height())
+            fill_radius = min(radius, fill_width / 2)
+            painter.setBrush(QColor("#f97316"))
+            painter.drawRoundedRect(fill, fill_radius, fill_radius)
 
 
 class DeckWidget(DesignPanel):
@@ -22,18 +44,34 @@ class DeckWidget(DesignPanel):
         if on_air:
             service.player.positionChanged.connect(self._position_changed)
             service.player.playbackStateChanged.connect(self._state_changed)
-            self.progress = QProgressBar(self)
+            self.progress = RoundedProgressBar(self)
             self.progress.setRange(0, 1000)
             self.progress.setTextVisible(False)
-            self.progress.setStyleSheet("QProgressBar{border:0;background:#26344a;border-radius:4px;} QProgressBar::chunk{background:#f97316;border-radius:4px;}")
             self.add_control(self.progress, self.local_rect("17:428"))
             self.progress.hide()
             self.seek = QSlider(Qt.Orientation.Horizontal)
             self.seek.setRange(0, 1000)
             self.seek.setAccessibleName("Posição do áudio")
-            self.seek.setStyleSheet("QSlider{background:transparent;} QSlider::groove:horizontal{height:8px;background:transparent;} QSlider::handle:horizontal{width:0px;background:transparent;}")
+            self.seek.setStyleSheet("""
+                QSlider { background: transparent; }
+                QSlider::groove:horizontal {
+                    height: 8px;
+                    background: transparent;
+                }
+                QSlider::sub-page:horizontal,
+                QSlider::add-page:horizontal {
+                    background: transparent;
+                    border: 0;
+                }
+                QSlider::handle:horizontal {
+                    width: 0;
+                    background: transparent;
+                    border: 0;
+                }
+            """)
             self.seek.sliderReleased.connect(lambda: service.player.setPosition(round(service.player.duration()*self.seek.value()/1000)))
             self.add_control(self.seek, self.local_rect("17:428").adjusted(0, -8, 0, 8))
+        self._queue_changed()
 
     def _track_changed(self, track):
         if self.on_air:
@@ -43,8 +81,6 @@ class DeckWidget(DesignPanel):
         self._queue_changed()
 
     def _queue_changed(self):
-        if self.service.demo:
-            return
         if self.on_air:
             if self.service.index < 0:
                 self.set_text("17:422", "Nenhum áudio selecionado")
@@ -76,8 +112,6 @@ class DeckWidget(DesignPanel):
         self.progress.setValue(round(percent*1000))
 
     def _state_changed(self, state):
-        if self.service.demo:
-            return
         text = {
             QMediaPlayer.PlaybackState.PlayingState: "NO AR — TOCANDO AGORA",
             QMediaPlayer.PlaybackState.PausedState: "PLAYER — PAUSADO",

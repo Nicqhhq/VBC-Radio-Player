@@ -31,7 +31,7 @@ class PlayerPage(QWidget):
         top_layout.setSpacing(16)
         self.on_air = DeckWidget(service, True)
         self.next_deck = DeckWidget(service, False)
-        self.clock = StudioClockWidget()
+        self.clock = StudioClockWidget(service)
         self.modes = PlaybackModesWidget(service)
         for widget, stretch in [(self.on_air,396), (self.next_deck,396), (self.clock,236), (self.modes,328)]:
             top_layout.addWidget(widget, stretch)
