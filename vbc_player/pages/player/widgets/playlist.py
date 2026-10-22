@@ -90,8 +90,6 @@ class PlaylistWidget(DesignPanel):
         self.service = service
         self.selected = 0
         self.hovered_row = -1
-        self.button("Adicionar áudio", self.local_rect("17:545"), self.import_audio)
-        self.button("Remover item selecionado", self.local_rect("17:547"), self.remove_selected)
         self.setAcceptDrops(True)
         self.table = PlaylistTable(0, 8, self)
         self.table.setAcceptDrops(True)
@@ -165,9 +163,6 @@ class PlaylistWidget(DesignPanel):
     def add_tracks(self, paths):
         self.service.add_tracks(paths)
 
-    def remove_selected(self):
-        self.service.remove(self.selected)
-
     def _selected(self):
         self.selected = self.table.currentRow()
         self._apply_row_colors()
@@ -197,9 +192,9 @@ class PlaylistWidget(DesignPanel):
         self.table.viewport().update()
 
     def refresh(self):
-        # Hide the original demo header/rows, while reusing the frame and actions.
+        # Mantém apenas o painel, o título e a contagem do desenho original.
         for node in self.design.get("c", []):
-            if node["id"] not in {"17:481", "17:482", "17:483", "17:545", "17:546", "17:547", "17:548"}:
+            if node["id"] not in {"17:481", "17:482", "17:483"}:
                 self.hidden.add(node["id"])
         self.table.show()
         self.table.setRowCount(len(self.service.tracks))

@@ -1,23 +1,31 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from vbc_player.common.widgets.design_panel import DesignPanel
+from vbc_player.common.widgets.window_controls import WindowControls
 
 
 class HeaderWidget(DesignPanel):
     def __init__(self, window):
         super().__init__("24:2", window)
         self.window = window
-        for component in ("29:6", "56:298"):
+        self.hidden.update({"56:292", "56:304"})
+        for component in ("29:6",):
             node = self._components[component]
             self.design.setdefault("c", []).append(node)
             from vbc_player.common.widgets.design_panel import descendants
             self.nodes.update({n["id"]: n for n in descendants(node)})
-        self.button("Minimizar", (1270, 0, 48, 48), window.showMinimized)
-        self.button("Maximizar / restaurar", (1330, 0, 48, 48), self._maximize)
-        self.button("Fechar", (1390, 0, 50, 48), window.close)
+        self.controls = WindowControls(window, self)
+        self._place_window_controls()
+
+    def _place_window_controls(self):
+        self.controls.move(self.width() - self.controls.width(), 0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._place_window_controls()
 
     def _maximize(self):
-        self.window.showNormal() if self.window.isMaximized() else self.window.showMaximized()
+        self.window.showNormal() if self.window.isMaximized() or self.window.isFullScreen() else self.window.showMaximized()
 
     def paintEvent(self, event):
         if self.window.isMaximized() or self.window.isFullScreen():
