@@ -42,6 +42,7 @@ class DeckWidget(DesignPanel):
         service.track_changed.connect(self._track_changed)
         service.queue_changed.connect(self._queue_changed)
         if on_air:
+            self.nodes["17:421"]["b"][2] = self.design_width - self.local_rect("17:421").x() - 18
             service.player.positionChanged.connect(self._position_changed)
             service.player.playbackStateChanged.connect(self._state_changed)
             self.progress = RoundedProgressBar(self)
