@@ -9,8 +9,7 @@ class PlaybackModesWidget(DesignPanel):
         self.manual = self.button("Modo manual", self.local_rect("17:465"), lambda: self.set_automatic(False))
         self.loop = self.button("Repetir lista", self.local_rect("17:474"), lambda value: setattr(service, "loop", value), True)
         self.shuffle = self.button("Reprodução aleatória", self.local_rect("17:476"), lambda value: setattr(service, "shuffle", value), True)
-        satellite = self.button("Satélite: conexão externa não configurada", self.local_rect("17:478"), lambda: None)
-        satellite.setEnabled(False)
+        self.hidden.update({"17:478", "17:479"})
         self.setToolTip("Crossfade: referência visual de 2,5 s. Processamento de mixagem ainda não implementado.")
 
     def set_automatic(self, enabled):
