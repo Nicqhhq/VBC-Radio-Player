@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QProgressBar, QSlider
 
@@ -42,6 +42,7 @@ class DeckWidget(DesignPanel):
         service.track_changed.connect(self._track_changed)
         service.queue_changed.connect(self._queue_changed)
         if on_air:
+            self.hidden.add("17:420")
             self.nodes["17:421"]["b"][2] = self.design_width - self.local_rect("17:421").x() - 18
             service.player.positionChanged.connect(self._position_changed)
             service.player.playbackStateChanged.connect(self._state_changed)
@@ -73,6 +74,20 @@ class DeckWidget(DesignPanel):
             self.seek.sliderReleased.connect(lambda: service.player.setPosition(round(service.player.duration()*self.seek.value()/1000)))
             self.add_control(self.seek, self.local_rect("17:428").adjusted(0, -8, 0, 8))
         self._queue_changed()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.on_air:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.scale(self.width() / self.design_width, self.height() / self.design_height)
+            icon = self.local_rect("17:420")
+            painter.setPen(QPen(QColor("#ffffff"), 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            for x, height in ((2, 5), (7, 11), (12, 7)):
+                center = icon.center().y()
+                painter.drawLine(QPointF(icon.x() + x, center - height / 2),
+                                 QPointF(icon.x() + x, center + height / 2))
+            painter.end()
 
     def _track_changed(self, track):
         if self.on_air:
