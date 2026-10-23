@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView, QFileDialog, QHeaderView, QStyledItemDelegate,
     QTableWidget, QTableWidgetItem,
@@ -65,6 +65,27 @@ class PlaylistTable(QTableWidget):
         event.accept()
 
 
+class PlaylistHeader(QHeaderView):
+    def paintSection(self, painter, rect, logical_index):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setClipRect(rect, Qt.ClipOperation.IntersectClip)
+        painter.fillRect(rect, QColor("#111827"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#25344a"))
+        painter.drawRoundedRect(QRectF(0, 0, self.viewport().width(), self.height()), 8, 8)
+        font = QFont(self.font())
+        font.setPixelSize(11)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        painter.setPen(QColor("#d3deed"))
+        label = str(self.model().headerData(logical_index, self.orientation()) or "")
+        text_rect = rect.adjusted(10, 0, -10, 0)
+        label = QFontMetricsF(font).elidedText(label, Qt.TextElideMode.ElideRight, text_rect.width())
+        painter.drawText(text_rect, self.defaultAlignment(), label)
+        painter.restore()
+
+
 class PlaylistItemDelegate(QStyledItemDelegate):
     """Pinta o estado da linha sem usar o destaque nativo do sistema."""
 
@@ -72,9 +93,13 @@ class PlaylistItemDelegate(QStyledItemDelegate):
         background = index.data(Qt.ItemDataRole.BackgroundRole)
         color = background.color() if background is not None else QColor("#111827")
         painter.save()
-        painter.fillRect(option.rect, color)
-        painter.setPen(QPen(QColor("#29364a"), 1))
-        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setClipRect(option.rect, Qt.ClipOperation.IntersectClip)
+        painter.fillRect(option.rect, QColor("#111827"))
+        row_rect = QRectF(0, option.rect.y() + 2, option.widget.viewport().width(), option.rect.height() - 4)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(row_rect, 8, 8)
         column = index.column()
         font = QFont(option.font)
         font.setPixelSize(14 if column == 2 else 12 if column in (0, 1, 6) else 13)
@@ -108,6 +133,7 @@ class PlaylistWidget(DesignPanel):
         self.hovered_row = -1
         self.setAcceptDrops(True)
         self.table = PlaylistTable(0, 8, self)
+        self.table.setHorizontalHeader(PlaylistHeader(Qt.Orientation.Horizontal, self.table))
         self.table.setAcceptDrops(True)
         self.table.setHorizontalHeaderLabels(["#", "TIPO", "ARQUIVO / TÍTULO", "DURAÇÃO", "INÍCIO", "FIM", "STATUS", ""])
         self.table.setColumnHidden(7, True)
